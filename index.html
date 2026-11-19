@@ -2,7 +2,7 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" href="data:," />
     <title>まいにちピアノすごろく（クリスマス編）</title>
@@ -27,7 +27,7 @@
         --cell-line: #d9e4d4;
         --reward-bg: #fdf0cd;
         --staff-line: #9db8a4;
-        --flake: #c3d8e8;
+        --flake: #8fb8d8;
         --shadow: 0 4px 14px rgba(20, 80, 58, 0.13);
       }
       @media (prefers-color-scheme: dark) {
@@ -62,6 +62,7 @@
         background: var(--bg);
         color: var(--ink);
         -webkit-text-size-adjust: 100%;
+        touch-action: manipulation;
       }
       button {
         font-family: inherit;
@@ -71,6 +72,11 @@
         background: none;
         color: inherit;
         -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+      /* ダブルタップ拡大を防ぐ：タップ対象すべてに manipulation を効かせる */
+      .cell, #staffSvg g.note, .simon-bell, .bell-btn, .present-btn {
+        touch-action: manipulation;
       }
       button:focus-visible, [tabindex]:focus-visible {
         outline: 3px solid var(--gold);
@@ -96,7 +102,8 @@
         top: -3vh;
         border-radius: 50%;
         background: var(--flake);
-        opacity: 0.75;
+        box-shadow: 0 0 0 1px rgba(70, 120, 165, 0.30), 0 1px 6px rgba(70, 120, 165, 0.35);
+        opacity: 0.9;
         animation-name: snowfall;
         animation-timing-function: linear;
         animation-iteration-count: infinite;
@@ -485,7 +492,7 @@
       /* ---------- snow storm ---------- */
       #snowStorm { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 80; display: none; }
       #snowStorm.on { display: block; }
-      .storm-flake { position: absolute; top: -4vh; border-radius: 50%; background: #eaf4fb; box-shadow: 0 0 6px rgba(255,255,255,0.8); }
+      .storm-flake { position: absolute; top: -4vh; border-radius: 50%; background: #ffffff; box-shadow: 0 0 0 1.5px rgba(80, 135, 185, 0.55), 0 0 10px rgba(110, 165, 215, 0.65); }
       #btnStopSnow {
         position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%);
         z-index: 81; pointer-events: auto;
@@ -921,9 +928,37 @@
           var AC = window.AudioContext || window.webkitAudioContext;
           if (AC) actx = new AC();
         }
-        if (actx && actx.state === "suspended") actx.resume();
+        // iOS Safari では放置／バックグラウンド後に "suspended" や "interrupted" のまま戻らないことがある
+        if (actx && actx.state !== "running") {
+          try {
+            var rp = actx.resume();
+            if (rp && rp.catch) rp.catch(function () {});
+          } catch (e) {}
+        }
         return actx;
       }
+      function resumeAudio() {
+        if (!actx) return;
+        if (actx.state === "suspended" || actx.state === "interrupted" || actx.state !== "running") {
+          try {
+            var rp2 = actx.resume();
+            if (rp2 && rp2.catch) rp2.catch(function () {});
+          } catch (e) {}
+        }
+      }
+      // ページが再び表示されたときに AudioContext を復帰させる
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) resumeAudio();
+      });
+      window.addEventListener("pageshow", resumeAudio);
+      window.addEventListener("focus", resumeAudio);
+      // ユーザー操作のたびに（ジェスチャ内なら確実に resume できる）復帰を試みる
+      document.addEventListener("pointerdown", function () { ac(); }, true);
+      document.addEventListener("touchend", function () { ac(); }, true);
+      document.addEventListener("click", function () { ac(); }, true);
+      // iOS Safari のダブルタップ／ピンチ拡大ジェスチャを止める（じゆうピアノの連打対策）
+      document.addEventListener("gesturestart", function (e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener("dblclick", function (e) { e.preventDefault(); }, { passive: false });
       function tone(freq, delay, dur, type, vol) {
         var ctx = ac(); if (!ctx) return;
         var t = ctx.currentTime + (delay || 0);
@@ -958,6 +993,13 @@
           g.gain.setValueAtTime(v, t);
           g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
           o.connect(g); g.connect(ctx.destination);
+          if (typeof activeBellOsc !== "undefined") {
+            activeBellOsc.push(o);
+            o.onended = function () {
+              var ix = activeBellOsc.indexOf(o);
+              if (ix !== -1) activeBellOsc.splice(ix, 1);
+            };
+          }
           o.start(t); o.stop(t + 1.2);
         });
       }
@@ -1157,8 +1199,20 @@
       /* ================= modal ================= */
       var overlay = document.getElementById("overlay");
       var modalBody = document.getElementById("modalBody");
-      function openModal(html) { modalBody.innerHTML = html; overlay.classList.add("open"); }
-      function closeModal() { overlay.classList.remove("open"); modalBody.innerHTML = ""; }
+      var simonTimers = [];
+      var activeBellOsc = [];
+      function clearSimonTimers() {
+        simonTimers.forEach(function (id) { clearTimeout(id); });
+        simonTimers = [];
+      }
+      function stopSimonGame() {
+        clearSimonTimers();
+        simon = null;
+        activeBellOsc.forEach(function (o) { try { o.stop(); } catch (e) {} });
+        activeBellOsc = [];
+      }
+      function openModal(html) { stopSimonGame(); modalBody.innerHTML = html; overlay.classList.add("open"); }
+      function closeModal() { stopSimonGame(); overlay.classList.remove("open"); modalBody.innerHTML = ""; }
       overlay.addEventListener("click", function (e) { if (e.target === overlay) closeModal(); });
       function burst(container, n, colors) {
         if (reduceMotion || !container) return;
@@ -1195,10 +1249,10 @@
           for (var k = 0; k < 3; k++) {
             var f = document.createElement("span");
             f.className = "storm-flake";
-            var sz = 5 + Math.random() * 10;
+            var sz = 8 + Math.random() * 12;
             f.style.width = sz + "px"; f.style.height = sz + "px";
             f.style.left = (Math.random() * 100) + "vw";
-            f.style.opacity = (0.55 + Math.random() * 0.45).toFixed(2);
+            f.style.opacity = (0.75 + Math.random() * 0.25).toFixed(2);
             storm.appendChild(f);
             var drift = (Math.random() * 90 - 45);
             var anim = f.animate([
@@ -1282,7 +1336,7 @@
         var btn = modalBody.querySelector('.simon-bell[data-i="' + i + '"]');
         if (!btn) return;
         btn.classList.add("lit");
-        setTimeout(function () { btn.classList.remove("lit"); }, dur || 380);
+        simonTimers.push(setTimeout(function () { btn.classList.remove("lit"); }, dur || 380));
       }
       function simonRound() {
         simon.seq = [];
@@ -1297,17 +1351,18 @@
         var msg = document.getElementById("simonMsg");
         if (msg) msg.textContent = "よく みて、きいてね…";
         simon.seq.forEach(function (bi, k) {
-          setTimeout(function () {
+          simonTimers.push(setTimeout(function () {
+            if (!simon) return;
             bellTone(SIMON_BELLS[bi].f, 0);
             lightBell(bi, 400);
-          }, 500 + k * 620);
+          }, 500 + k * 620));
         });
-        setTimeout(function () {
+        simonTimers.push(setTimeout(function () {
           if (!simon) return;
           simon.phase = "input";
           var m = document.getElementById("simonMsg");
           if (m) m.textContent = "まねっこして タッチしてね（" + simon.len + "つ）";
-        }, 500 + simon.seq.length * 620 + 150);
+        }, 500 + simon.seq.length * 620 + 150));
       }
       function simonTap(i) {
         bellTone(SIMON_BELLS[i].f, 0);
@@ -1326,14 +1381,14 @@
             } else {
               msg.textContent = "せいかい！ つぎは " + (simon.len + 1) + "つに チャレンジ！";
               simon.len++;
-              setTimeout(function () { if (simon) simonRound(); }, 1400);
+              simonTimers.push(setTimeout(function () { if (simon) simonRound(); }, 1400));
             }
           }
         } else {
           // まちがえても失敗にしない：やさしく知らせて、同じ順番をもう一度見せる
           simon.phase = "show";
           msg.textContent = "おしい！ だいじょうぶ。もういちど みてみよう";
-          setTimeout(function () { if (simon) playSimonSeq(); }, 1100);
+          simonTimers.push(setTimeout(function () { if (simon) playSimonSeq(); }, 1100));
         }
       }
       /* ---- reward: day 15, free piano ---- */
@@ -1534,7 +1589,7 @@
         wireClose();
         document.getElementById("btnDoReset").addEventListener("click", function () {
           state = { pos: 0, rewards: {}, opened: {}, stickers: [] };
-          simon = null;
+          stopSimonGame();
           stopSnowStorm();
           try { window.localStorage.removeItem(LS_KEY); } catch (e) {}
           playTimers.forEach(clearTimeout); playTimers = []; playing = false;
@@ -1548,15 +1603,15 @@
       (function makeSnow() {
         if (reduceMotion) return;
         var layer = document.getElementById("snowLayer");
-        for (var i = 0; i < 22; i++) {
+        for (var i = 0; i < 30; i++) {
           var f = document.createElement("span");
           f.className = "snow";
-          var sz = 4 + Math.random() * 6;
+          var sz = 6 + Math.random() * 8;
           f.style.width = sz + "px"; f.style.height = sz + "px";
           f.style.left = (Math.random() * 100) + "vw";
           f.style.animationDuration = (8 + Math.random() * 8) + "s";
           f.style.animationDelay = (-Math.random() * 14) + "s";
-          f.style.opacity = (0.35 + Math.random() * 0.45).toFixed(2);
+          f.style.opacity = (0.6 + Math.random() * 0.4).toFixed(2);
           layer.appendChild(f);
         }
       })();
