@@ -1265,7 +1265,8 @@
           }
         };
         spawn();
-        if (!reduceMotion) stormSpawner = setInterval(spawn, 160);
+        // ユーザーがボタンで自分から降らせる雪は、端末の「視差効果を減らす」設定に関係なく降り続ける
+        stormSpawner = setInterval(spawn, 160);
         // 「ゆきを とめる」を押すまで降り続ける（自動では止まらない）
       }
       function stopSnowStorm() {
