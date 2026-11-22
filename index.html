@@ -1133,7 +1133,7 @@
             '<span class="cell-inner">' +
             '<span class="cell-face cell-front">' + icon +
             '<span class="dnum">' + d + '</span>' +
-            '<span class="dlabel">' + (d === 25 ? "ゴール" : "12がつ" + d + "にち") + '</span>' +
+            '<span class="dlabel">' + (d === 25 ? "ゴール" : d + "にちめ") + '</span>' +
             '</span>' +
             '<span class="cell-face cell-back">' +
             '<svg class="rart" aria-hidden="true"><use href="#i-' + rv.art + '"/></svg>' +
@@ -1166,15 +1166,15 @@
           cell.classList.toggle("replay", isReplay);
           cell.disabled = !(isNext || isReplay);
           cell.setAttribute("aria-label", isReplay
-            ? "12がつ" + d + "にちの ごほうびマス。タップして もういちど あそぼう"
+            ? d + "にちめの ごほうびマス。タップして もういちど あそぼう"
             : state.opened[d]
-              ? "12がつ" + d + "にち： " + REVEALS[d - 1].name + "が でたよ"
+              ? d + "にちめ： " + REVEALS[d - 1].name + "が でたよ"
               : isNext
-                ? "12がつ" + d + "にちの マス。タップして めくろう"
-                : "12がつ" + d + "にちの マス");
+                ? d + "にちめの マス。タップして めくろう"
+                : d + "にちめの マス");
         }
         document.getElementById("posLabel").textContent =
-          state.pos === 0 ? "スタートに いるよ" : "いまは 12がつ" + state.pos + "にちの マス";
+          state.pos === 0 ? "スタートに いるよ" : "いまは " + state.pos + "にちめの マス";
         document.getElementById("goalLabel").textContent =
           state.pos >= 25 ? "ゴール！ おめでとう！" : "ゴールまで あと " + (25 - state.pos) + " マス";
       }
@@ -1502,7 +1502,7 @@
           '<div class="c-title">ひょうしょうじょう</div>' +
           '<div class="c-main">よく がんばったね！</div>' +
           '<p>まいにち ピアノを ひいて、25にちの ゴールまで<br />すすむことが できました。</p>' +
-          '<p>2026ねん 12がつ25にち</p></div>' +
+          '<p>2026ねん クリスマス</p></div>' +
           '<div class="santa-msg">まいにち コツコツ ひく すがたを、そらから ずっと みていたよ。すてきな「ジングルベル」を ありがとう。らいねんも いっしょに おんがくを たのしもうね。' +
           '<span class="from">サンタさんより</span></div>' +
           '<div class="modal-btns">' +
